@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2e8d9">
+  <title>Make a QR code for your note</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f5eee4;
+      --cream: #fffaf3;
+      --ink: #342d28;
+      --muted: #766b61;
+      --rose: #a95750;
+      --rose-dark: #85413d;
+      --sage: #77816a;
+      --line: #e7d9ca;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px 16px;
+      display: grid;
+      place-items: center;
+      color: var(--ink);
+      background: radial-gradient(ellipse at 12% 12%, #fffaf2 0, transparent 42%),
+        radial-gradient(ellipse at 90% 88%, #ead9c5 0, transparent 38%), var(--paper);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+    .tool {
+      width: min(100%, 540px);
+      padding: clamp(24px, 7vw, 48px);
+      border: 1px solid rgba(137, 105, 80, .17);
+      border-radius: 8px;
+      background: rgba(255, 250, 243, .93);
+      box-shadow: 0 22px 70px rgba(93, 69, 48, .11);
+    }
+    .eyebrow { margin: 0 0 14px; color: var(--sage); font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 9vw, 3rem); font-weight: 400; line-height: 1.12; }
+    .intro { margin: 16px 0 25px; color: var(--muted); line-height: 1.7; }
+    label { display: block; margin-bottom: 8px; font-size: .9rem; font-weight: 700; }
+    .url-row { display: flex; gap: 8px; }
+    input {
+      width: 100%;
+      min-width: 0;
+      min-height: 50px;
+      padding: 12px;
+      border: 1px solid #cdbdad;
+      border-radius: 5px;
+      color: var(--ink);
+      background: #fffdf9;
+      font: inherit;
+    }
+    input:focus-visible, button:focus-visible { outline: 3px solid #a9575070; outline-offset: 3px; }
+    button {
+      min-height: 50px;
+      padding: 12px 18px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      color: #fffaf5;
+      background: var(--rose);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .2s ease, transform .2s ease;
+    }
+    button:hover:not(:disabled) { background: var(--rose-dark); }
+    button:active:not(:disabled) { transform: scale(.98); }
+    button:disabled { color: #8f857d; background: #e8dfd5; cursor: not-allowed; }
+    .error { min-height: 1.4em; margin: 9px 0 0; color: #9c3838; font-size: .88rem; }
+    .qr-frame {
+      min-height: 300px;
+      margin: 20px 0;
+      display: grid;
+      place-items: center;
+      border: 1px dashed #cdbdad;
+      border-radius: 5px;
+      background: #fff;
+    }
+    #qrOutput { max-width: 100%; padding: 12px; }
+    #qrOutput canvas, #qrOutput img { display: block; width: min(260px, 68vw); height: auto; image-rendering: pixelated; }
+    .placeholder { max-width: 24ch; padding: 20px; color: var(--muted); text-align: center; line-height: 1.6; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .status { min-height: 1.4em; margin: 14px 0 0; color: var(--sage); font-size: .88rem; text-align: center; }
+    @media (max-width: 480px) {
+      .url-row { flex-direction: column; }
+      .actions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="tool">
+    <p class="eyebrow">A little link, ready to share</p>
+    <h1>Make your QR code</h1>
+    <p class="intro">Paste the public link to your hosted page. Your QR code will be ready to save or share.</p>
+    <form id="qrForm" novalidate>
+      <label for="pageUrl">Public page URL</label>
+      <div class="url-row">
+        <input id="pageUrl" name="pageUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://your-page.netlify.app" required>
+        <button type="submit">Generate QR</button>
+      </div>
+      <p class="error" id="error" role="alert"></p>
+    </form>
+    <div class="qr-frame" aria-label="QR code preview">
+      <div id="qrOutput"><p class="placeholder">Your high-contrast QR code will appear here.</p></div>
+    </div>
+    <div class="actions">
+      <button id="download" type="button" disabled>Download PNG</button>
+      <button id="copy" type="button" disabled>Copy link</button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    const form = document.getElementById("qrForm");
+    const urlInput = document.getElementById("pageUrl");
+    const output = document.getElementById("qrOutput");
+    const error = document.getElementById("error");
+    const status = document.getElementById("status");
+    const downloadButton = document.getElementById("download");
+    const copyButton = document.getElementById("copy");
+    let currentUrl = "";
+
+    function resetResult() {
+      currentUrl = "";
+      output.replaceChildren(Object.assign(document.createElement("p"), {
+        className: "placeholder",
+        textContent: "Your high-contrast QR code will appear here."
+      }));
+      downloadButton.disabled = true;
+      copyButton.disabled = true;
+      status.textContent = "";
+    }
+
+    urlInput.addEventListener("input", () => {
+      error.textContent = "";
+      resetResult();
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      error.textContent = "";
+      status.textContent = "";
+      const value = urlInput.value.trim();
+      let parsedUrl;
+      try { parsedUrl = new URL(value); } catch { parsedUrl = null; }
+      if (!value.startsWith("https://") || !parsedUrl || !parsedUrl.hostname) {
+        error.textContent = "Please enter a public link that starts with https://, such as https://your-page.netlify.app.";
+        return;
+      }
+      if (typeof QRCode === "undefined") {
+        error.textContent = "The QR code library couldn't load. Check your connection and try again.";
+        return;
+      }
+      output.replaceChildren();
+      currentUrl = parsedUrl.href;
+      try {
+        new QRCode(output, {
+          text: currentUrl,
+          width: 260,
+          height: 260,
+          colorDark: "#171411",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+        downloadButton.disabled = false;
+        copyButton.disabled = false;
+        status.textContent = "QR code ready.";
+      } catch {
+        resetResult();
+        error.textContent = "That link couldn't be turned into a QR code. Please check it and try again.";
+      }
+    });
+
+    downloadButton.addEventListener("click", () => {
+      const canvas = output.querySelector("canvas");
+      if (!canvas) {
+        error.textContent = "The QR image isn't ready to download yet. Generate it again.";
+        return;
+      }
+      const link = document.createElement("a");
+      link.download = "love-page-qr.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+
+    copyButton.addEventListener("click", async () => {
+      if (!currentUrl) return;
+      try {
+        await navigator.clipboard.writeText(currentUrl);
+        status.textContent = "Link copied to your clipboard.";
+      } catch {
+        urlInput.focus();
+        urlInput.select();
+        const copied = document.execCommand("copy");
+        status.textContent = copied ? "Link copied to your clipboard." : "Select and copy the link from the box above.";
+      }
+    });
+  </script>
+</body>
+</html>
